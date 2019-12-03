@@ -2,12 +2,6 @@ param(
     [string]$InputPath = (Join-Path $PSScriptRoot 'input.txt')
 )
 
-$wires = Get-Content $InputPath
-$wire1 = $wires[0] -split ','
-$wire2 = $wires[1] -split ','
-
-$grid = [System.Collections.Generic.Dictionary[[string],[System.Collections.Generic.HashSet[string]]]]::new()
-
 function Traverse {
     param(
         [Parameter(ValueFromPipeline)]
@@ -18,17 +12,20 @@ function Traverse {
     begin {
         $x = 0
         $y = 0
+        $stepCount = 0
     }
 
     process {
         function SetPoint ($a,$b) {
             $point = "$a,$b"
             if($_ = $grid[$point]) {
-                $_.Add($Label) | Out-Null
+                if(!$_.Keys.Contains($label)) {
+                    $_[$label] = $stepCount
+                }
             } else {
-                $set = [System.Collections.Generic.HashSet[string]]::new()
-                $set.Add($Label) | Out-Null
-                $grid[$point] = $set
+                $grid[$point] = @{
+                    $label = $stepCount
+                }
             }
         }
 
@@ -36,57 +33,62 @@ function Traverse {
             $direction = $step[0]
             [int]$distance = $step.Substring(1)
 
-            switch ($direction) {
+            $incrementor = switch ($direction) {
                 'U' {
-                    1..$distance | ForEach-Object {
-                        $y++
-                        SetPoint $x $y
-                    }
+                    { param([ref]$x, [ref]$y) $y.Value++ }
                 }
                 'D' {
-                    1..$distance | ForEach-Object {
-                        $y--
-                        SetPoint $x $y
-                    }
+                    { param([ref]$x, [ref]$y) $y.Value-- }
                 }
                 'L' {
-                    1..$distance | ForEach-Object {
-                        $x--
-                        SetPoint $x $y
-                    }
+                    { param([ref]$x, [ref]$y) $x.Value-- }
                 }
                 'R' {
-                    1..$distance | ForEach-Object {
-                        $x++
-                        SetPoint $x $y
-                    }
+                    { param([ref]$x, [ref]$y) $x.Value++ }
                 }
                 Default {
                     Write-Error "Invalid direction $direction"
                 }
             }
+
+            1..$distance | ForEach-Object {
+                $incrementor.Invoke([ref]$x, [ref]$y)
+                $stepCount++
+                SetPoint $x $y
+            }
         }
     }
 }
 
+$wires = Get-Content $InputPath
+$wire1 = $wires[0] -split ','
+$wire2 = $wires[1] -split ','
+
+$grid = [System.Collections.Generic.Dictionary[[string],hashtable]]::new()
+
 $wire1 | Traverse -Label 'Wire1'
 $wire2 | Traverse -Label 'Wire2'
 
+$crossSections = $grid.Keys | Where-Object { $grid[$_].Keys.Count -eq 2 }
 
-$answer1 = $grid.Keys |
-    Where-Object {
-        $grid[$_].Count -eq 2
-    } |
+# Answer 1
+$answer1 = $crossSections |
     ForEach-Object {
-        [int]$a,[int]$b = $_.Replace('-','').Split(',')
-        $a + $b
+        [int]$a,[int]$b = $_.Split(',')
+        [Math]::Abs($a) + [Math]::Abs($b)
     } |
     Measure-Object -Minimum |
     Select-Object -ExpandProperty Minimum
 
-# Answer 1
+
 Write-Host "Answer1 : $answer1"
 
-# Answer 2 - yuck brute force!
-$answer2 = 'missing'
+# Answer 2
+$answer2 = $crossSections|
+    ForEach-Object {
+        $grid[$_].Values | Measure-Object -Sum | Select-Object -ExpandProperty Sum
+    } |
+    Measure-Object -Minimum |
+    Select-Object -ExpandProperty Minimum
+
 Write-Host "Answer2 : $answer2"
