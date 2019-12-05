@@ -21,6 +21,7 @@ class Instruction {
 
 function Execute {
     param(
+        [int[]]$Buffer,
         [int]$InputValue
     )
 
@@ -36,7 +37,7 @@ function Execute {
         switch ($Mode){
             0 {
                 # Position Mode
-                return $memory[$Address]
+                return $Buffer[$Address]
             }
             1 {
                 # Immediate Mode
@@ -49,33 +50,77 @@ function Execute {
     }
 
     do {
-        [Instruction]$instruction = $memory[$pointer]
+        [Instruction]$instruction = $Buffer[$pointer]
         switch($instruction.OpCode){
             1 {
                 # Add and store
-                $a = Read $memory[++$pointer] $instruction.Parameter1Mode
-                $b = Read $memory[++$pointer] $instruction.Parameter2Mode
-                $writeAddress = $memory[++$pointer]
-                $memory[$writeAddress] = $a + $b
+                $a = Read $Buffer[++$pointer] $instruction.Parameter1Mode
+                $b = Read $Buffer[++$pointer] $instruction.Parameter2Mode
+                $writeAddress = $Buffer[++$pointer]
+                $Buffer[$writeAddress] = $a + $b
                 break;
             }
             2 {
                 # Multiple and store
-                $a = Read $memory[++$pointer] $instruction.Parameter1Mode
-                $b = Read $memory[++$pointer] $instruction.Parameter2Mode
-                $writeAddress = $memory[++$pointer]
-                $memory[$writeAddress] = $a * $b
+                $a = Read $Buffer[++$pointer] $instruction.Parameter1Mode
+                $b = Read $Buffer[++$pointer] $instruction.Parameter2Mode
+                $writeAddress = $Buffer[++$pointer]
+                $Buffer[$writeAddress] = $a * $b
                 break;
             }
             3 {
                 # Save input
-                $writeAddress = $memory[++$pointer]
-                $memory[$writeAddress] = $InputValue
+                $writeAddress = $Buffer[++$pointer]
+                $Buffer[$writeAddress] = $InputValue
                 break;
             }
             4 {
                 # Output
-                Read $memory[++$pointer] $instruction.Parameter1Mode
+                Read $Buffer[++$pointer] $instruction.Parameter1Mode
+                break;
+            }
+            5 {
+                # Jump if true
+                $p1 = Read $Buffer[++$pointer] $instruction.Parameter1Mode
+                $p2 = Read $Buffer[++$pointer] $instruction.Parameter2Mode
+                if($p1 -ne 0) {
+                    $pointer = $p2
+                    $pointer--
+                }
+                break;
+            }
+            6 {
+                # Jump if false
+                $p1 = Read $Buffer[++$pointer] $instruction.Parameter1Mode
+                $p2 = Read $Buffer[++$pointer] $instruction.Parameter2Mode
+                if($p1 -eq 0) {
+                    $pointer = $p2
+                    $pointer--
+                }
+                break;
+            }
+            7 {
+                # Less than
+                $p1 = Read $Buffer[++$pointer] $instruction.Parameter1Mode
+                $p2 = Read $Buffer[++$pointer] $instruction.Parameter2Mode
+                $writeAddress = $Buffer[++$pointer]
+                if($p1 -lt $p2 ) {
+                    $Buffer[$writeAddress] = 1
+                } else {
+                    $Buffer[$writeAddress] = 0
+                }
+                break;
+            }
+            8 {
+                # Equals
+                $p1 = Read $Buffer[++$pointer] $instruction.Parameter1Mode
+                $p2 = Read $Buffer[++$pointer] $instruction.Parameter2Mode
+                $writeAddress = $Buffer[++$pointer]
+                if($p1 -eq $p2 ) {
+                    $Buffer[$writeAddress] = 1
+                } else {
+                    $Buffer[$writeAddress] = 0
+                }
                 break;
             }
             99 {
@@ -91,5 +136,8 @@ function Execute {
     until ($halt)
 }
 
-$answer1 = Execute -InputValue 1
+$answer1 = Execute -InputValue 1 -Buffer $memory.Clone()
 Write-Host "Answer1 : $($answer1[-1])"
+
+$answer2 = Execute -InputValue 5  -Buffer $memory.Clone()
+Write-Host "Answer2 : $answer2"
